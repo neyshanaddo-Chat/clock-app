@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#0e1116">
+<meta name="description" content="Clock, world clock, alarms, timer and stopwatch in one simple app.">
+<title>Tick Clock</title>
+<!-- clock-template v0.1 -->
+<style>
+:root{
+  --bg:#0e1116; --panel:#171b22; --panel2:#1f2530; --text:#e9edf3; --muted:#8b95a5;
+  --accent:#4fd1c5; --accent2:#f6ad55; --danger:#fc8181; --line:#2a313d;
+  --font: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --digits: ui-monospace,"SF Mono","Roboto Mono",Menlo,Consolas,monospace;
+  --safe-t: env(safe-area-inset-top,0px); --safe-b: env(safe-area-inset-bottom,0px);
+}
+[data-theme="light"]{--bg:#f5f6f8;--panel:#fff;--panel2:#eef1f5;--text:#141820;--muted:#5d6675;--accent:#0f8a7e;--accent2:#b85c00;--danger:#c53030;--line:#d8dde5}
+[data-theme="sunset"]{--bg:#1a1020;--panel:#24162c;--panel2:#2f1d39;--text:#fbeff5;--muted:#b59bb8;--accent:#ff8fab;--accent2:#ffc76b;--danger:#ff6b6b;--line:#3d2848}
+[data-theme="contrast"]{--bg:#000;--panel:#000;--panel2:#111;--text:#fff;--muted:#cfcfcf;--accent:#ffff00;--accent2:#00ffff;--danger:#ff5555;--line:#fff}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-tap-highlight-color:transparent}
+body{display:flex;flex-direction:column;min-height:100dvh;padding-top:var(--safe-t)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:var(--panel2);border-radius:12px;padding:.7em 1.1em;min-height:44px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:#06110f;font-weight:700}
+[data-theme="contrast"] button.primary{color:#000}
+button.danger{background:var(--danger);color:#1a0505;font-weight:700}
+button.ghost{background:transparent;border:1px solid var(--line)}
+button:disabled{opacity:.45;cursor:default}
+input,select{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:.55em .7em;min-height:44px}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px}
+header h1{font-size:1.15rem;margin:0;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#backLink:not([hidden])+h1{font-size:1rem}
+header .icons{display:flex;gap:6px}
+header .icons button{background:transparent;font-size:1.3rem;padding:.3em .6em}
+main{flex:1;overflow-y:auto;padding:4px 16px 16px}
+section.view{display:none;max-width:720px;margin:0 auto}
+section.view.active{display:block}
+nav.tabs{display:grid;grid-template-columns:repeat(5,1fr);background:var(--panel);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+nav.tabs button{background:transparent;border-radius:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;font-size:.75rem;color:var(--muted);min-height:58px}
+nav.tabs button .ic{font-size:1.35rem;line-height:1}
+nav.tabs button[aria-selected="true"]{color:var(--accent);font-weight:700}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin:10px 0}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.spread{justify-content:space-between}
+.muted{color:var(--muted)}
+.small{font-size:.85rem}
+.digits{font-family:var(--digits);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.empty{text-align:center;color:var(--muted);padding:28px 8px}
+/* Clock */
+#clockFace{display:flex;flex-direction:column;align-items:center;padding:18px 0 8px}
+#bigTime{font-size:clamp(3.2rem,17vw,7.5rem);font-weight:300;line-height:1}
+#bigTime .sec{font-size:.42em;color:var(--muted);margin-left:.15em}
+#bigTime .ampm{font-size:.3em;color:var(--muted);margin-left:.25em;font-family:var(--font)}
+#bigDate{color:var(--muted);margin-top:10px;font-size:1.05rem}
+#analog{width:min(64vw,260px);height:auto;margin:10px 0 16px}
+#analog .face{fill:var(--panel);stroke:var(--line);stroke-width:2}
+#analog .tick{stroke:var(--muted);stroke-linecap:round}
+#analog .hand-h,#analog .hand-m{stroke:var(--text);stroke-linecap:round}
+#analog .hand-s{stroke:var(--accent2);stroke-linecap:round}
+#nextAlarm{margin-top:12px}
+/* Nightstand */
+#night{position:fixed;inset:0;background:#000;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:50;cursor:pointer}
+#night.on{display:flex}
+#nightTime{color:var(--accent);font-size:clamp(4rem,24vw,16rem);font-weight:200}
+#nightDate{color:#777;font-size:clamp(1rem,3vw,1.8rem)}
+#night .hint{position:absolute;bottom:calc(16px + var(--safe-b));color:#444;font-size:.85rem}
+/* World */
+.city{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.city .name{font-weight:600}
+.city .row{flex-wrap:nowrap;gap:4px}
+.city .t{font-size:1.9rem;white-space:nowrap}
+.city .del{background:transparent;color:var(--muted);padding:.3em .6em;min-height:36px}
+/* Alarms */
+.alarm{display:flex;align-items:center;gap:12px}
+.alarm .t{font-size:2.1rem}
+.alarm .info{flex:1;min-width:0}
+.alarm .info .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alarm.off .t,.alarm.off .lbl{opacity:.45}
+.switch{position:relative;width:52px;height:30px;padding:0;border-radius:15px;background:var(--line);flex:none;min-height:30px}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s}
+.switch[aria-checked="true"]{background:var(--accent)}
+.switch[aria-checked="true"]::after{left:25px}
+.days{display:flex;gap:6px;flex-wrap:wrap}
+.days button{min-width:42px;padding:.4em .5em;min-height:40px;border-radius:50px}
+.days button[aria-pressed="true"]{background:var(--accent);color:#06110f;font-weight:700}
+.fab{display:block;width:100%;margin:12px 0}
+/* Timer */
+#timerRing{display:block;margin:6px auto 0;width:min(72vw,280px);height:auto}
+#timerRing .bgc{stroke:var(--line)}
+#timerRing .fgc{stroke:var(--accent);transition:stroke-dashoffset .25s linear}
+#timerText{font-size:clamp(2.4rem,11vw,3.6rem)}
+.presets{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:10px 0}
+.presets button{min-width:64px}
+.hms{display:flex;gap:8px;justify-content:center;align-items:flex-end}
+.hms label{display:flex;flex-direction:column;align-items:center;font-size:.8rem;color:var(--muted);gap:4px}
+.hms input{width:5.2em;text-align:center;font-size:1.4rem}
+.controls{display:flex;gap:10px;justify-content:center;margin:16px 0}
+.controls button{min-width:110px}
+/* Stopwatch */
+#swTime{text-align:center;font-size:clamp(3rem,15vw,5.5rem);font-weight:300;margin:20px 0 4px}
+#swTime .cs{font-size:.5em;color:var(--muted)}
+#laps{list-style:none;padding:0;margin:0}
+#laps li{display:flex;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--line)}
+#laps li.best{color:var(--accent)}
+#laps li.worst{color:var(--danger)}
+/* Modals */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:40}
+.modal.on{display:flex}
+.sheet{background:var(--panel);width:100%;max-width:560px;max-height:92dvh;overflow-y:auto;border-radius:20px 20px 0 0;padding:18px 18px calc(18px + var(--safe-b))}
+@media (min-width:700px){.modal{align-items:center}.sheet{border-radius:20px}}
+.sheet h2{margin:0 0 12px;font-size:1.2rem}
+.field{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.field>span{font-size:.85rem;color:var(--muted)}
+.setrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.setrow:last-child{border-bottom:0}
+/* Ringing */
+#ring{position:fixed;inset:0;z-index:60;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center}
+#ring.on{display:flex}
+#ringIcon{font-size:4rem;animation:shake .6s infinite}
+#ringTitle{font-size:clamp(2.6rem,12vw,5rem);font-weight:300}
+#ringLabel{font-size:1.3rem;color:var(--muted);max-width:90vw;word-wrap:break-word}
+#ring .controls button{min-width:140px;font-size:1.15rem;min-height:56px}
+@keyframes shake{0%,100%{transform:rotate(0)}25%{transform:rotate(-14deg)}75%{transform:rotate(14deg)}}
+@media (prefers-reduced-motion:reduce){#ringIcon{animation:none}#timerRing .fgc,.switch::after{transition:none}}
+.back{color:var(--accent);text-decoration:none;font-weight:700;font-size:.95rem;padding:.4em .5em .4em 0;white-space:nowrap}
+header .icons button.install{font-size:.85rem;border:1px dashed var(--accent);color:var(--accent);padding:.3em .7em;min-height:36px;white-space:nowrap}
+.never{display:flex;align-items:center;gap:8px;margin:12px 0 4px;color:var(--muted);font-size:.9rem;cursor:pointer}
+.never input{width:18px;height:18px;min-height:0;accent-color:var(--accent)}
+.toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-b));transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:12px;z-index:70;display:none;max-width:90vw}
+.toast.on{display:block}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+</head>
+<body data-theme="dark">
+<header>
+  <div class="row" style="gap:6px;flex-wrap:nowrap;min-width:0"><a id="backLink" class="back" hidden></a><h1 id="appTitle">CLOCK</h1></div>
+  <div class="icons">
+    <button id="btnInstall" class="install" hidden>⬇ Install</button>
+    <button id="btnHelp" aria-label="How to use">?</button>
+    <button id="btnSettings" aria-label="Settings">⚙</button>
+  </div>
+</header>
+
+<main>
+  <!-- CLOCK -->
+  <section class="view active" id="view-clock" aria-label="Clock">
+    <div id="clockFace">
+      <svg id="analog" viewBox="0 0 200 200" aria-hidden="true">
+        <circle class="face" cx="100" cy="100" r="96"/>
+        <g id="ticks"></g>
+        <line class="hand-h" id="hH" x1="100" y1="100" x2="100" y2="52" stroke-width="7"/>
+        <line class="hand-m" id="hM" x1="100" y1="100" x2="100" y2="28" stroke-width="4.5"/>
+        <line class="hand-s" id="hS" x1="100" y1="116" x2="100" y2="22" stroke-width="2"/>
+        <circle cx="100" cy="100" r="5" fill="var(--accent2)"/>
+      </svg>
+      <div id="bigTime" class="digits" aria-live="off"></div>
+      <div id="bigDate"></div>
+      <div id="nextAlarm" class="muted small"></div>
+    </div>
+    <div class="controls"><button id="btnNight" class="ghost">🌙 Nightstand mode</button></div>
+  </section>
+
+  <!-- WORLD -->
+  <section class="view" id="view-world" aria-label="World clock">
+    <div id="cityList"></div>
+    <button id="btnAddCity" class="primary fab">＋ Add city</button>
+  </section>
+
+  <!-- ALARM -->
+  <section class="view" id="view-alarm" aria-label="Alarms">
+    <div id="alarmList"></div>
+    <button id="btnAddAlarm" class="primary fab">＋ Add alarm</button>
+    <p class="muted small" id="alarmNote"></p>
+  </section>
+
+  <!-- TIMER -->
+  <section class="view" id="view-timer" aria-label="Timer">
+    <div id="timerSetup">
+      <div class="hms">
+        <label>Hours<input id="tH" type="number" min="0" max="99" value="0" inputmode="numeric"></label>
+        <label>Minutes<input id="tM" type="number" min="0" max="59" value="5" inputmode="numeric"></label>
+        <label>Seconds<input id="tS" type="number" min="0" max="59" value="0" inputmode="numeric"></label>
+      </div>
+      <div class="presets" id="presets"></div>
+      <div class="field" style="max-width:320px;margin:8px auto"><span>Label (optional)</span><input id="tLabel" maxlength="40" placeholder="e.g. Pasta"></div>
+    </div>
+    <div id="timerRun" hidden>
+      <svg id="timerRing" viewBox="0 0 200 200" aria-hidden="true">
+        <circle class="bgc" cx="100" cy="100" r="88" fill="none" stroke-width="10"/>
+        <circle class="fgc" id="tArc" cx="100" cy="100" r="88" fill="none" stroke-width="10" stroke-linecap="round" transform="rotate(-90 100 100)"/>
+        <foreignObject x="20" y="70" width="160" height="70"><div xmlns="http://www.w3.org/1999/xhtml" style="text-align:center"><div id="timerText" class="digits"></div></div></foreignObject>
+      </svg>
+      <div id="timerRunLabel" class="muted" style="text-align:center"></div>
+      <div id="timerEnds" class="muted small" style="text-align:center;margin-top:4px"></div>
+    </div>
+    <div class="controls">
+      <button id="tReset" class="ghost">Reset</button>
+      <button id="tStart" class="primary">Start</button>
+      <button id="tPlus" class="ghost" hidden>+1 min</button>
+    </div>
+  </section>
+
+  <!-- STOPWATCH -->
+  <section class="view" id="view-stopwatch" aria-label="Stopwatch">
+    <div id="swTime" class="digits"></div>
+    <div class="controls">
+      <button id="swLap" class="ghost" disabled>Lap</button>
+      <button id="swStart" class="primary">Start</button>
+    </div>
+    <ul id="laps"></ul>
+  </section>
+</main>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-view="clock" aria-selected="true"><span class="ic">🕒</span>Clock</button>
+  <button role="tab" data-view="world" aria-selected="false"><span class="ic">🌍</span>World</button>
+  <button role="tab" data-view="alarm" aria-selected="false"><span class="ic">⏰</span>Alarm</button>
+  <button role="tab" data-view="timer" aria-selected="false"><span class="ic">⏳</span>Timer</button>
+  <button role="tab" data-view="stopwatch" aria-selected="false"><span class="ic">⏱</span>Stopwatch</button>
+</nav>
+
+<!-- Nightstand -->
+<div id="night" role="dialog" aria-label="Nightstand clock">
+  <div id="nightTime" class="digits"></div>
+  <div id="nightDate"></div>
+  <div class="hint">Tap anywhere or press Esc to exit</div>
+</div>
+
+<!-- Add city -->
+<div class="modal" id="mCity" role="dialog" aria-modal="true" aria-labelledby="mCityT">
+  <div class="sheet">
+    <h2 id="mCityT">Add a city</h2>
+    <div class="field"><span>Search city or time zone</span><input id="citySearch" autocomplete="off" placeholder="e.g. London, Tokyo, New York"></div>
+    <div id="cityResults"></div>
+    <div class="controls"><button class="ghost" data-close>Close</button></div>
+  </div>
+</div>
+
+<!-- Alarm editor -->
+<div class="modal" id="mAlarm" role="dialog" aria-modal="true" aria-labelledby="mAlarmT">
+  <div class="sheet">
+    <h2 id="mAlarmT">Alarm</h2>
+    <div class="field"><span>Time</span><input id="aTime" type="time" value="07:00" required></div>
+    <div class="field"><span>Repeat (none = rings once)</span><div class="days" id="aDays"></div></div>
+    <div class="field"><span>Label</span><input id="aLabel" maxlength="40" placeholder="Alarm"></div>
+    <div class="field"><span>Sound</span><select id="aSound"></select></div>
+    <div class="row spread">
+      <button id="aDelete" class="danger" hidden>Delete</button>
+      <div class="row"><button class="ghost" data-close>Cancel</button><button id="aSave" class="primary">Save</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="modal" id="mSettings" role="dialog" aria-modal="true" aria-labelledby="mSetT">
+  <div class="sheet">
+    <h2 id="mSetT">Settings</h2>
+    <div class="setrow"><span>24-hour time</span><button class="switch" id="s24" role="switch" aria-checked="false" aria-label="24-hour time"></button></div>
+    <div class="setrow"><span>Show seconds</span><button class="switch" id="sSec" role="switch" aria-checked="true" aria-label="Show seconds"></button></div>
+    <div class="setrow"><span>Analog clock face</span><button class="switch" id="sAnalog" role="switch" aria-checked="true" aria-label="Analog clock face"></button></div>
+    <div class="setrow"><span>Theme</span><select id="sTheme" aria-label="Theme"></select></div>
+    <div class="setrow"><span>Default alarm sound</span><select id="sSound" aria-label="Default alarm sound"></select></div>
+    <div class="setrow"><span>Volume</span><input id="sVol" type="range" min="0" max="100" step="5" aria-label="Volume"></div>
+    <div class="setrow"><span>Snooze length</span><select id="sSnooze" aria-label="Snooze length"></select></div>
+    <div class="setrow"><span>Vibrate when ringing</span><button class="switch" id="sVib" role="switch" aria-checked="true" aria-label="Vibrate when ringing"></button></div>
+    <div class="setrow"><span>Keep screen on (Clock tab)</span><button class="switch" id="sWake" role="switch" aria-checked="false" aria-label="Keep screen on"></button></div>
+    <div class="setrow"><span>Week starts on Monday</span><button class="switch" id="sMon" role="switch" aria-checked="true" aria-label="Week starts on Monday"></button></div>
+    <div class="row spread" style="margin-top:14px">
+      <button id="sTest" class="ghost">🔊 Test sound</button>
+      <button class="primary" data-close>Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help -->
+<div class="modal" id="mHelp" role="dialog" aria-modal="true" aria-labelledby="mHelpT">
+  <div class="sheet">
+    <h2 id="mHelpT">How to use</h2>
+    <p><b>Clock</b>: the time and date. 🌙 Nightstand mode shows a big dim clock.</p>
+    <p><b>World</b>: add cities to see their time and how far ahead or behind they are.</p>
+    <p><b>Alarm</b>: add alarms, choose repeat days, snooze or stop when they ring.</p>
+    <p><b>Timer</b>: set a time or tap a preset, then Start.</p>
+    <p><b>Stopwatch</b>: Start, Lap, Stop and Reset. Fastest lap is highlighted.</p>
+    <p class="muted small">Keys: 1–5 switch tabs · Space start/pause · L lap · R reset · N nightstand · Esc close.</p>
+    <p class="muted small" id="helpWebNote"></p>
+    <div class="controls"><button class="primary" data-close>Got it</button></div>
+  </div>
+</div>
+
+<!-- Get the app -->
+<div class="modal" id="mInstall" role="dialog" aria-modal="true" aria-labelledby="mInstallT">
+  <div class="sheet">
+    <h2 id="mInstallT">Get the app</h2>
+    <p id="installText"></p>
+    <p class="muted" id="installHow"></p>
+    <label class="never"><input type="checkbox" id="installNever"> Never show again</label>
+    <div class="row spread" style="margin-top:10px"><button class="ghost" id="installLater">Not now</button><span id="installRight"></span></div>
+  </div>
+</div>
+
+<!-- Ringing -->
+<div id="ring" role="alertdialog" aria-modal="true" aria-labelledby="ringTitle" aria-describedby="ringLabel">
+  <div id="ringIcon" aria-hidden="true">⏰</div>
+  <div id="ringTitle" class="digits"></div>
+  <div id="ringLabel"></div>
+  <div class="controls">
+    <button id="ringSnooze" class="ghost">Snooze</button>
+    <button id="ringStop" class="primary">Stop</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="sr" id="announce" aria-live="assertive"></div>
+
+<script>
+"use strict";
+/* ===================== CONFIG (customise per build) ===================== */
+const CONFIG = {
+  title: "TICK CLOCK",
+  storageKey: "tickclock.web.v1",          // change per customised build
+  ringMinutes: 10,                     // alarm/timer auto-silences after this
+  missedGraceSec: 90,                  // an alarm missed by up to this long (tab asleep) still rings
+  timerPresets: [60, 180, 300, 600, 900, 1800, 3600],
+  defaultCities: ["Europe/London", "America/New_York", "Asia/Tokyo"],
+  serviceWorker: true,                // true in installable/app builds
+  installPrompt: true,                // web build: offer "Get the app" (install to home screen) when opened in a phone browser
+  backLink: {"url": "https://neyshanaddo-chat.github.io/Ai-Tools/index.html#apps", "label": "Ai-Tools"},                      // web build inside a site, e.g. { url: "https://…/Ai-Tools/index.html#apps", label: "Ai-Tools" }
+  maxAlarms: 30, maxCities: 20, maxLaps: 200,
+  onAlarmsChanged: null                // optional hook(alarms) e.g. for custom native scheduling
+};
+const DEFAULTS = {
+  h24: false, seconds: true, analog: true, theme: "dark", sound: "chime", volume: 70,
+  snooze: 9, vibrate: true, wake: false, monday: true
+};
+const THEMES = { dark: "Dark", light: "Light", sunset: "Sunset", contrast: "High contrast" };
+const SOUNDS = { chime: "Chime", beep: "Classic beep", gentle: "Gentle rise", digital: "Digital" };
+const SNOOZES = [1, 3, 5, 9, 10, 15, 20, 30];
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const FALLBACK_ZONES = ["Africa/Cairo","Africa/Johannesburg","Africa/Lagos","Africa/Nairobi","America/Anchorage","America/Bogota","America/Chicago","America/Denver","America/Los_Angeles","America/Mexico_City","America/New_York","America/Sao_Paulo","America/Toronto","America/Vancouver","Asia/Bangkok","Asia/Dubai","Asia/Hong_Kong","Asia/Jakarta","Asia/Kolkata","Asia/Manila","Asia/Seoul","Asia/Shanghai","Asia/Singapore","Asia/Tokyo","Australia/Adelaide","Australia/Brisbane","Australia/Darwin","Australia/Hobart","Australia/Melbourne","Australia/Perth","Australia/Sydney","Europe/Amsterdam","Europe/Berlin","Europe/Dublin","Europe/Istanbul","Europe/London","Europe/Madrid","Europe/Moscow","Europe/Paris","Europe/Rome","Pacific/Auckland","Pacific/Fiji","Pacific/Honolulu","UTC"];
+
+/* ===================== helpers ===================== */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const pad = (n, w = 2) => String(n).padStart(w, "0");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const cleanLabel = s => String(s || "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 40);
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+const now = () => Date.now();
+let LOCAL_TZ = "UTC";
+try { LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch (e) {}
+
+function toast(msg, ms = 2200) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("on"), ms);
+}
+function announce(msg) { $("#announce").textContent = ""; setTimeout(() => $("#announce").textContent = msg, 30); }
+
+/* ===================== state + storage ===================== */
+const S = {
+  settings: { ...DEFAULTS },
+  cities: CONFIG.defaultCities.slice(),
+  alarms: [],                // {id,h,m,days:[0-6],label,on,sound}
+  fired: {},                 // alarmId -> "YYYY-MM-DD HH:MM" last fired minute
+  snoozes: [],               // {id, alarmId, label, sound, at}
+  timer: { dur: 300000, endAt: null, left: null, label: "" },
+  sw: { startAt: null, acc: 0, laps: [] },
+  view: "clock"
+};
+function validZone(z) {
+  if (typeof z !== "string" || z.length > 64) return false;
+  try { new Intl.DateTimeFormat("en", { timeZone: z }); return true; } catch (e) { return false; }
+}
+function load() {
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(CONFIG.storageKey) || "null"); } catch (e) { raw = null; }
+  if (!raw || typeof raw !== "object") return;
+  const st = raw.settings || {};
+  for (const k in DEFAULTS) {
+    const d = DEFAULTS[k], v = st[k];
+    if (typeof v !== typeof d) continue;
+    if (k === "theme" && !THEMES[v]) continue;
+    if (k === "sound" && !SOUNDS[v]) continue;
+    if (k === "volume") { S.settings[k] = clamp(Math.round(v), 0, 100); continue; }
+    if (k === "snooze" && !SNOOZES.includes(v)) continue;
+    S.settings[k] = v;
+  }
+  if (Array.isArray(raw.cities)) S.cities = raw.cities.filter(validZone).filter((z, i, a) => a.indexOf(z) === i).slice(0, CONFIG.maxCities);
+  if (Array.isArray(raw.alarms)) S.alarms = raw.alarms.map(a => ({
+    id: typeof a.id === "string" ? a.id.slice(0, 20) : uid(),
+    h: clamp(parseInt(a.h, 10) || 0, 0, 23), m: clamp(parseInt(a.m, 10) || 0, 0, 59),
+    days: Array.isArray(a.days) ? [...new Set(a.days.map(Number).filter(d => d >= 0 && d <= 6))].sort() : [],
+    label: cleanLabel(a.label), on: a.on !== false, sound: SOUNDS[a.sound] ? a.sound : S.settings.sound,
+    createdAt: typeof a.createdAt === "number" ? a.createdAt : 0
+  })).slice(0, CONFIG.maxAlarms);
+  if (raw.fired && typeof raw.fired === "object") for (const k in raw.fired) if (typeof raw.fired[k] === "string") S.fired[k] = raw.fired[k];
+  if (Array.isArray(raw.snoozes)) S.snoozes = raw.snoozes.filter(s => s && typeof s.at === "number" && s.at > now() - 3600e3).map(s => ({ id: String(s.id || uid()), alarmId: String(s.alarmId || ""), label: cleanLabel(s.label), sound: SOUNDS[s.sound] ? s.sound : S.settings.sound, at: s.at })).slice(0, 10);
+  const t = raw.timer || {};
+  if (typeof t.dur === "number" && t.dur > 0 && t.dur <= 360000e3) S.timer.dur = t.dur;
+  if (typeof t.endAt === "number") S.timer.endAt = t.endAt;
+  if (typeof t.left === "number" && t.left >= 0) S.timer.left = t.left;
+  S.timer.label = cleanLabel(t.label);
+  const w = raw.sw || {};
+  if (typeof w.startAt === "number" && w.startAt <= now()) S.sw.startAt = w.startAt;
+  if (typeof w.acc === "number" && w.acc >= 0) S.sw.acc = w.acc;
+  if (Array.isArray(w.laps)) S.sw.laps = w.laps.filter(x => typeof x === "number" && x >= 0).slice(0, CONFIG.maxLaps);
+  if (["clock", "world", "alarm", "timer", "stopwatch"].includes(raw.view)) S.view = raw.view;
+}
+function save() {
+  try { localStorage.setItem(CONFIG.storageKey, JSON.stringify(S)); } catch (e) {}
+}
+
+/* ===================== time formatting ===================== */
+function partsIn(tz, d) {
+  const f = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", weekday: "short" });
+  const o = {}; for (const p of f.formatToParts(d)) o[p.type] = p.value;
+  return { y: +o.year, mo: +o.month, d: +o.day, h: +o.hour % 24, mi: +o.minute, s: +o.second, wd: o.weekday };
+}
+function offsetMin(tz, d = new Date()) {
+  const p = partsIn(tz, d);
+  return Math.round((Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(d.getTime() / 1000) * 1000) / 60000);
+}
+function fmtHM(h, m, withAmPm = true) {
+  if (S.settings.h24) return pad(h) + ":" + pad(m);
+  const hh = h % 12 || 12;
+  return hh + ":" + pad(m) + (withAmPm ? (h < 12 ? " AM" : " PM") : "");
+}
+function fmtDur(ms, showCs = false) {
+  ms = Math.max(0, ms);
+  const tot = Math.floor(ms / 1000), h = Math.floor(tot / 3600), m = Math.floor(tot / 60) % 60, s = tot % 60;
+  let out = (h ? h + ":" + pad(m) : pad(m)) + ":" + pad(s);
+  if (showCs) out += "." + pad(Math.floor(ms / 10) % 100);
+  return out;
+}
+function cityName(tz) { if (tz === "UTC") return "UTC"; const p = tz.split("/"); return p[p.length - 1].replace(/_/g, " "); }
+function region(tz) { const p = tz.split("/"); return p.length > 1 ? p[0].replace(/_/g, " ") : ""; }
+function relDiff(mins) {
+  if (mins === 0) return "Same time";
+  const a = Math.abs(mins), h = Math.floor(a / 60), m = a % 60;
+  return (h ? h + " h" : "") + (m ? (h ? " " : "") + m + " min" : "") + (mins > 0 ? " ahead" : " behind");
+}
+
+/* ===================== audio ===================== */
+let AC = null, ringNodes = null;
+function audio() {
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; } }
+  if (AC && AC.state === "suspended") AC.resume().catch(() => {});
+  return AC;
+}
+["pointerdown", "keydown", "touchstart"].forEach(ev => window.addEventListener(ev, () => audio(), { once: true, passive: true }));
+function tone(ctx, out, t, freq, dur, type = "sine", vol = 1, slideTo = null) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.linearRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05);
+}
+// One "bar" of each sound, ~2 s long. intensity 0..1 lets "gentle" grow.
+function playBar(sound, intensity = 1) {
+  const ctx = audio(); if (!ctx) return;
+  const out = ctx.createGain(); out.gain.value = (S.settings.volume / 100) * 0.5 * intensity; out.connect(ctx.destination);
+  const t = ctx.currentTime + 0.02;
+  if (sound === "beep") { for (let i = 0; i < 4; i++) tone(ctx, out, t + i * 0.25, 880, 0.14, "square", 0.6); }
+  else if (sound === "digital") { for (let r = 0; r < 2; r++) for (let i = 0; i < 3; i++) tone(ctx, out, t + r * 0.8 + i * 0.12, 1320, 0.07, "square", 0.5); }
+  else if (sound === "gentle") { [523, 659, 784, 1047].forEach((f, i) => tone(ctx, out, t + i * 0.35, f, 0.9, "sine", 0.8)); }
+  else { [1047, 784, 880, 659].forEach((f, i) => tone(ctx, out, t + i * 0.32, f, 0.8, "triangle", 0.9)); }
+}
+
+/* ===================== ringing ===================== */
+let ringing = null; // {kind:"alarm"|"timer", alarmId?, label, sound, started}
+function startRing(r) {
+  if (ringing) stopRing(false);
+  ringing = { ...r, started: now() };
+  $("#ringIcon").textContent = r.kind === "timer" ? "⏳" : "⏰";
+  $("#ringTitle").textContent = r.kind === "timer" ? "Time's up" : fmtHM(new Date().getHours(), new Date().getMinutes());
+  $("#ringLabel").textContent = r.label || (r.kind === "timer" ? "Timer" : "Alarm");
+  $("#ringSnooze").textContent = r.kind === "timer" ? "+1 min" : "Snooze " + S.settings.snooze + " min";
+  $("#ring").classList.add("on");
+  $("#ringStop").focus();
+  announce((r.kind === "timer" ? "Timer finished. " : "Alarm. ") + (r.label || ""));
+  let n = 0;
+  const loop = () => {
+    if (!ringing) return;
+    if (now() - ringing.started > CONFIG.ringMinutes * 60e3) { stopRing(true); toast("Silenced after " + CONFIG.ringMinutes + " min"); return; }
+    playBar(ringing.sound, ringing.sound === "gentle" ? Math.min(1, 0.25 + n * 0.08) : 1);
+    if (S.settings.vibrate && navigator.vibrate) { try { navigator.vibrate([400, 200, 400]); } catch (e) {} }
+    n++;
+  };
+  loop(); ringNodes = setInterval(loop, 2200);
+  if (window.__onRing) window.__onRing(ringing);
+}
+function stopRing(hide = true) {
+  clearInterval(ringNodes); ringNodes = null; ringing = null;
+  if (navigator.vibrate) { try { navigator.vibrate(0); } catch (e) {} }
+  if (hide) $("#ring").classList.remove("on");
+}
+$("#ringStop").onclick = () => {
+  const r = ringing; stopRing();
+  if (r && r.kind === "timer") { S.timer.endAt = null; S.timer.left = null; save(); renderTimer(); }
+};
+$("#ringSnooze").onclick = () => {
+  const r = ringing; if (!r) return; stopRing();
+  if (r.kind === "timer") { S.timer.endAt = now() + 60e3; S.timer.left = null; save(); renderTimer(); toast("+1 minute"); return; }
+  S.snoozes.push({ id: uid(), alarmId: r.alarmId || "", label: r.label, sound: r.sound, at: now() + S.settings.snooze * 60e3 });
+  save(); renderAlarms(); syncNative(); toast("Snoozed for " + S.settings.snooze + " min");
+};
+
+/* ===================== alarms ===================== */
+function nextFire(a, from = new Date()) {
+  // next Date >= from (minute resolution) when alarm a rings; null if off
+  if (!a.on) return null;
+  for (let i = 0; i <= 7; i++) {
+    const d = new Date(from.getFullYear(), from.getMonth(), from.getDate() + i, a.h, a.m, 0, 0);
+    if (d.getTime() < from.getTime() - 999) continue;
+    if (a.days.length && !a.days.includes(d.getDay())) continue;
+    return d;
+  }
+  return null;
+}
+function minuteKey(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+function checkAlarms() {
+  const t = now(), d = new Date(t);
+  for (const a of S.alarms) {
+    if (!a.on) continue;
+    // ring time for "today" (or a recently passed minute, if the page was asleep)
+    const due = new Date(d.getFullYear(), d.getMonth(), d.getDate(), a.h, a.m, 0, 0);
+    for (const c of [due]) {
+      const late = t - c.getTime();
+      if (late < 0 || late > CONFIG.missedGraceSec * 1000) continue;
+      if (a.days.length && !a.days.includes(c.getDay())) continue;
+      const key = minuteKey(c);
+      if (S.fired[a.id] === key) continue;
+      if (c.getTime() < (a.createdAt || 0)) continue;
+      S.fired[a.id] = key;
+      if (!a.days.length) a.on = false; // one-off
+      save(); renderAlarms(); syncNative();
+      startRing({ kind: "alarm", alarmId: a.id, label: a.label, sound: a.sound });
+      return;
+    }
+  }
+  for (const s of S.snoozes.slice()) {
+    if (s.at <= t) {
+      S.snoozes = S.snoozes.filter(x => x !== s); save(); renderAlarms(); syncNative();
+      if (t - s.at <= CONFIG.missedGraceSec * 1000) { startRing({ kind: "alarm", alarmId: s.alarmId, label: s.label, sound: s.sound }); return; }
+    }
+  }
+}
+function untilText(ms) {
+  const mins = Math.ceil(ms / 60000), h = Math.floor(mins / 60), m = mins % 60;
+  if (mins < 1) return "less than a minute";
+  if (h >= 24) return Math.floor(h / 24) + " d" + (h % 24 ? " " + (h % 24) + " h" : "");
+  return (h ? h + " h " : "") + (m || !h ? m + " min" : "").trim();
+}
+function nextAlarmInfo() {
+  let best = null;
+  for (const a of S.alarms) { const n = nextFire(a); if (n && (!best || n < best.d)) best = { d: n, a }; }
+  for (const s of S.snoozes) { const d = new Date(s.at); if (!best || d < best.d) best = { d, a: { label: (s.label || "Alarm") + " (snoozed)" } }; }
+  return best;
+}
+function dayOrder() { return S.settings.monday ? [1, 2, 3, 4, 5, 6, 0] : [0, 1, 2, 3, 4, 5, 6]; }
+function repeatText(days) {
+  if (!days.length) return "Once";
+  if (days.length === 7) return "Every day";
+  const k = days.join("");
+  if (k === "12345") return "Weekdays";
+  if (k === "06") return "Weekends";
+  return dayOrder().filter(d => days.includes(d)).map(d => DAY_NAMES[d]).join(" ");
+}
+function renderAlarms() {
+  const list = $("#alarmList");
+  const sorted = S.alarms.slice().sort((x, y) => x.h * 60 + x.m - (y.h * 60 + y.m));
+  let html = "";
+  for (const s of S.snoozes) html += `<div class="card alarm"><div class="info"><div class="t digits">${esc(fmtHM(new Date(s.at).getHours(), new Date(s.at).getMinutes()))}</div><div class="lbl">💤 ${esc(s.label || "Alarm")} · snoozed</div></div><button class="ghost" data-unsnooze="${esc(s.id)}">Cancel</button></div>`;
+  for (const a of sorted) {
+    const n = nextFire(a);
+    html += `<div class="card alarm ${a.on ? "" : "off"}" data-id="${esc(a.id)}">
+      <div class="info" data-edit="${esc(a.id)}" role="button" tabindex="0" aria-label="Edit alarm ${esc(fmtHM(a.h, a.m))}">
+        <div class="t digits">${esc(fmtHM(a.h, a.m))}</div>
+        <div class="lbl small">${esc(a.label || "Alarm")} · ${esc(repeatText(a.days))}${n ? " · in " + esc(untilText(n - now())) : ""}</div>
+      </div>
+      <button class="switch" role="switch" aria-checked="${a.on}" aria-label="Alarm ${esc(fmtHM(a.h, a.m))} on" data-toggle="${esc(a.id)}"></button>
+    </div>`;
+  }
+  list.innerHTML = html || `<div class="empty">No alarms yet.<br>Tap “Add alarm” to set one.</div>`;
+  $("#btnAddAlarm").disabled = S.alarms.length >= CONFIG.maxAlarms;
+  renderNextAlarm();
+}
+$("#alarmList").addEventListener("click", e => {
+  const tg = e.target.closest("[data-toggle]"), ed = e.target.closest("[data-edit]"), us = e.target.closest("[data-unsnooze]");
+  if (tg) { const a = S.alarms.find(x => x.id === tg.dataset.toggle); if (a) { a.on = !a.on; if (a.on) a.createdAt = now(); save(); renderAlarms(); syncNative(); if (a.on) { const n = nextFire(a); if (n) toast("Rings in " + untilText(n - now())); } } }
+  else if (ed) openAlarm(ed.dataset.edit);
+  else if (us) { S.snoozes = S.snoozes.filter(s => s.id !== us.dataset.unsnooze); save(); renderAlarms(); syncNative(); }
+});
+$("#alarmList").addEventListener("keydown", e => { const ed = e.target.closest("[data-edit]"); if (ed && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openAlarm(ed.dataset.edit); } });
+let editingId = null, editDays = [];
+function renderDayButtons() {
+  $("#aDays").innerHTML = dayOrder().map(d => `<button type="button" data-day="${d}" aria-pressed="${editDays.includes(d)}">${DAY_NAMES[d]}</button>`).join("");
+}
+$("#aDays").addEventListener("click", e => {
+  const b = e.target.closest("[data-day]"); if (!b) return;
+  const d = +b.dataset.day; editDays = editDays.includes(d) ? editDays.filter(x => x !== d) : [...editDays, d].sort();
+  renderDayButtons();
+});
+function openAlarm(id = null) {
+  editingId = id;
+  const a = id ? S.alarms.find(x => x.id === id) : null;
+  const def = new Date(now() + 3600e3);
+  $("#mAlarmT").textContent = a ? "Edit alarm" : "New alarm";
+  $("#aTime").value = a ? pad(a.h) + ":" + pad(a.m) : pad(def.getHours()) + ":00";
+  editDays = a ? a.days.slice() : [];
+  $("#aLabel").value = a ? a.label : "";
+  $("#aSound").value = a ? a.sound : S.settings.sound;
+  $("#aDelete").hidden = !a;
+  renderDayButtons(); openModal("#mAlarm"); $("#aTime").focus();
+}
+$("#btnAddAlarm").onclick = () => openAlarm(null);
+$("#aSave").onclick = () => {
+  const m = /^(\d{1,2}):(\d{2})/.exec($("#aTime").value);
+  if (!m) { toast("Choose a time"); return; }
+  const h = clamp(+m[1], 0, 23), mi = clamp(+m[2], 0, 59);
+  const data = { h, m: mi, days: editDays.slice(), label: cleanLabel($("#aLabel").value), sound: SOUNDS[$("#aSound").value] ? $("#aSound").value : S.settings.sound, on: true, createdAt: now() };
+  if (editingId) { const a = S.alarms.find(x => x.id === editingId); Object.assign(a, data); delete S.fired[a.id]; }
+  else S.alarms.push({ id: uid(), ...data });
+  save(); closeModal(); renderAlarms(); syncNative();
+  const a = editingId ? S.alarms.find(x => x.id === editingId) : S.alarms[S.alarms.length - 1];
+  const n = nextFire(a); if (n) toast("Alarm set for " + untilText(n - now()) + " from now");
+};
+$("#aDelete").onclick = () => {
+  S.alarms = S.alarms.filter(a => a.id !== editingId); delete S.fired[editingId];
+  save(); closeModal(); renderAlarms(); syncNative(); toast("Alarm deleted");
+};
+
+/* Native scheduling: when packaged with @capacitor/local-notifications, alarms
+   and the running timer are also scheduled as OS notifications so they fire
+   while the app is closed. In a browser this is a no-op. */
+async function syncNative() {
+  try { if (typeof CONFIG.onAlarmsChanged === "function") CONFIG.onAlarmsChanged(JSON.parse(JSON.stringify(S.alarms))); } catch (e) {}
+  const LN = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
+  if (!LN) return;
+  try {
+    const perm = await LN.checkPermissions();
+    if (perm.display !== "granted") { const r = await LN.requestPermissions(); if (r.display !== "granted") return; }
+    if (LN.createChannel && !syncNative._ch) {
+      // Android: a high-importance channel so alarms make sound and show over the lock screen.
+      try { await LN.createChannel({ id: "alarms", name: "Alarms and timers", description: "Alarms and finished timers", importance: 5, visibility: 1, vibration: true }); } catch (e) {}
+      syncNative._ch = true;
+    }
+    const pending = await LN.getPending();
+    if (pending.notifications.length) await LN.cancel({ notifications: pending.notifications.map(n => ({ id: n.id })) });
+    const list = []; let nid = 1000;
+    const horizon = now() + 7 * 86400e3;
+    for (const a of S.alarms) {
+      if (!a.on) continue;
+      let from = new Date(now() + 1000);
+      for (let k = 0; k < (a.days.length ? 7 : 1); k++) {
+        const d = nextFire(a, from); if (!d || d.getTime() > horizon) break;
+        list.push({ id: nid++, title: a.label || "Alarm", body: fmtHM(a.h, a.m), schedule: { at: d, allowWhileIdle: true }, channelId: "alarms", extra: { alarmId: a.id } });
+        from = new Date(d.getTime() + 60000);
+      }
+    }
+    for (const s of S.snoozes) if (s.at > now()) list.push({ id: nid++, title: (s.label || "Alarm") + " (snoozed)", body: "Snooze over", schedule: { at: new Date(s.at), allowWhileIdle: true }, channelId: "alarms" });
+    if (S.timer.endAt && S.timer.endAt > now()) list.push({ id: 999, title: S.timer.label || "Timer", body: "Time's up", schedule: { at: new Date(S.timer.endAt), allowWhileIdle: true }, channelId: "alarms" });
+    if (list.length) await LN.schedule({ notifications: list.slice(0, 60) });
+  } catch (e) { console.warn("native schedule failed", e); }
+}
+
+/* ===================== clock view ===================== */
+function buildTicks() {
+  let g = "";
+  for (let i = 0; i < 60; i++) {
+    const big = i % 5 === 0, a = i * Math.PI / 30, r1 = big ? 80 : 86, r2 = 91;
+    g += `<line class="tick" x1="${100 + r1 * Math.sin(a)}" y1="${100 - r1 * Math.cos(a)}" x2="${100 + r2 * Math.sin(a)}" y2="${100 - r2 * Math.cos(a)}" stroke-width="${big ? 3 : 1.2}"/>`;
+  }
+  $("#ticks").innerHTML = g;
+}
+function rot(el, deg) { el.setAttribute("transform", `rotate(${deg} 100 100)`); }
+function renderClock() {
+  const d = new Date(), h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+  let html;
+  if (S.settings.h24) html = pad(h) + ":" + pad(m);
+  else html = (h % 12 || 12) + ":" + pad(m);
+  if (S.settings.seconds) html += `<span class="sec">${pad(s)}</span>`;
+  if (!S.settings.h24) html += `<span class="ampm">${h < 12 ? "AM" : "PM"}</span>`;
+  const bt = $("#bigTime"); if (bt._h !== html) { bt.innerHTML = html; bt._h = html; }
+  const ds = d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  if ($("#bigDate").textContent !== ds) $("#bigDate").textContent = ds;
+  $("#analog").style.display = S.settings.analog ? "" : "none";
+  if (S.settings.analog) {
+    const ms = d.getMilliseconds();
+    rot($("#hH"), (h % 12) * 30 + m * 0.5);
+    rot($("#hM"), m * 6 + s * 0.1);
+    rot($("#hS"), s * 6 + (matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ms * 0.006));
+    $("#hS").style.display = S.settings.seconds ? "" : "none";
+  }
+  if ($("#night").classList.contains("on")) {
+    $("#nightTime").textContent = S.settings.h24 ? pad(h) + ":" + pad(m) : (h % 12 || 12) + ":" + pad(m);
+    $("#nightDate").textContent = d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  }
+}
+function renderNextAlarm() {
+  const n = nextAlarmInfo();
+  $("#nextAlarm").textContent = n ? `⏰ Next alarm ${fmtHM(n.d.getHours(), n.d.getMinutes())} · in ${untilText(n.d - now())}` : "";
+}
+
+/* Wake lock (keep screen on) */
+let wakeLock = null;
+async function updateWake() {
+  const want = document.visibilityState === "visible" && ((S.settings.wake && S.view === "clock") || $("#night").classList.contains("on"));
+  try {
+    if (want && !wakeLock && navigator.wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); }
+    else if (!want && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch (e) { wakeLock = null; }
+}
+function setNight(on) {
+  $("#night").classList.toggle("on", on);
+  if (on) { renderClock(); try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} }
+  else if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); }
+  updateWake();
+}
+$("#btnNight").onclick = () => setNight(true);
+$("#night").onclick = () => setNight(false);
+
+/* ===================== world view ===================== */
+function allZones() {
+  let z = [];
+  try { z = Intl.supportedValuesOf("timeZone"); } catch (e) {}
+  if (!z || !z.length) z = FALLBACK_ZONES;
+  if (!z.includes("UTC")) z = z.concat("UTC");
+  return z.filter(x => !/^Etc\//.test(x));
+}
+let ZONES = null;
+function renderWorld() {
+  const d = new Date(), localOff = offsetMin(LOCAL_TZ, d);
+  const lp = partsIn(LOCAL_TZ, d), localDay = Date.UTC(lp.y, lp.mo - 1, lp.d);
+  let html = "";
+  for (const tz of S.cities) {
+    const p = partsIn(tz, d), diff = offsetMin(tz, d) - localOff;
+    const dayDiff = Math.round((Date.UTC(p.y, p.mo - 1, p.d) - localDay) / 86400e3);
+    const dayTxt = dayDiff === 0 ? "Today" : dayDiff === 1 ? "Tomorrow" : dayDiff === -1 ? "Yesterday" : p.wd;
+    const night = p.h < 6 || p.h >= 19;
+    html += `<div class="card city"><div><div class="name">${night ? "🌙" : "☀️"} ${esc(cityName(tz))}</div><div class="muted small">${esc(dayTxt)} · ${esc(relDiff(diff))}${region(tz) ? " · " + esc(region(tz)) : ""}</div></div>
+      <div class="row"><div class="t digits">${esc(fmtHM(p.h, p.mi))}</div><button class="del" data-del="${esc(tz)}" aria-label="Remove ${esc(cityName(tz))}">✕</button></div></div>`;
+  }
+  const out = html || `<div class="empty">No cities yet.<br>Tap “Add city”.</div>`;
+  const cl = $("#cityList"); if (cl._h !== out) { cl.innerHTML = out; cl._h = out; }
+  $("#btnAddCity").disabled = S.cities.length >= CONFIG.maxCities;
+}
+$("#cityList").addEventListener("click", e => {
+  const b = e.target.closest("[data-del]"); if (!b) return;
+  S.cities = S.cities.filter(z => z !== b.dataset.del); save(); renderWorld();
+});
+function renderCityResults() {
+  if (!ZONES) ZONES = allZones();
+  const q = $("#citySearch").value.trim().toLowerCase().replace(/\s+/g, " ");
+  const d = new Date();
+  const res = ZONES.filter(z => !S.cities.includes(z) && (!q || z.toLowerCase().replace(/_/g, " ").includes(q))).slice(0, 40);
+  $("#cityResults").innerHTML = res.length ? res.map(z => { const p = partsIn(z, d); return `<button class="ghost" style="display:flex;justify-content:space-between;width:100%;margin:4px 0" data-add="${esc(z)}"><span>${esc(cityName(z))} <span class="muted small">${esc(region(z))}</span></span><span class="digits">${esc(fmtHM(p.h, p.mi))}</span></button>`; }).join("") : `<div class="empty">No match. Try a bigger nearby city in the same time zone.</div>`;
+}
+$("#citySearch").addEventListener("input", renderCityResults);
+$("#cityResults").addEventListener("click", e => {
+  const b = e.target.closest("[data-add]"); if (!b || !validZone(b.dataset.add)) return;
+  if (S.cities.length >= CONFIG.maxCities) return;
+  S.cities.push(b.dataset.add); save(); closeModal(); renderWorld(); toast(cityName(b.dataset.add) + " added");
+});
+$("#btnAddCity").onclick = () => { $("#citySearch").value = ""; renderCityResults(); openModal("#mCity"); $("#citySearch").focus(); };
+
+/* ===================== timer ===================== */
+function timerLeft() { const t = S.timer; return t.endAt ? Math.max(0, t.endAt - now()) : (t.left != null ? t.left : t.dur); }
+function timerState() { return S.timer.endAt ? "running" : S.timer.left != null ? "paused" : "idle"; }
+function readInputs() {
+  const h = clamp(parseInt($("#tH").value, 10) || 0, 0, 99), m = clamp(parseInt($("#tM").value, 10) || 0, 0, 59), s = clamp(parseInt($("#tS").value, 10) || 0, 0, 59);
+  $("#tH").value = h; $("#tM").value = m; $("#tS").value = s;
+  return (h * 3600 + m * 60 + s) * 1000;
+}
+function setInputs(ms) { const t = Math.round(ms / 1000); $("#tH").value = Math.floor(t / 3600); $("#tM").value = Math.floor(t / 60) % 60; $("#tS").value = t % 60; }
+function renderTimer() {
+  const st = timerState();
+  $("#timerSetup").hidden = st !== "idle"; $("#timerRun").hidden = st === "idle";
+  $("#tStart").textContent = st === "running" ? "Pause" : st === "paused" ? "Resume" : "Start";
+  $("#tReset").disabled = st === "idle"; $("#tPlus").hidden = st === "idle";
+  if (st !== "idle") {
+    const left = timerLeft(), C = 2 * Math.PI * 88, frac = S.timer.dur ? clamp(left / S.timer.dur, 0, 1) : 0;
+    $("#tArc").setAttribute("stroke-dasharray", C); $("#tArc").setAttribute("stroke-dashoffset", C * (1 - frac));
+    const txt = fmtDur(Math.ceil(left / 1000) * 1000);
+    if ($("#timerText").textContent !== txt) $("#timerText").textContent = txt;
+    $("#timerRunLabel").textContent = S.timer.label;
+    if (st === "running") { const e = new Date(S.timer.endAt); $("#timerEnds").textContent = "🔔 " + fmtHM(e.getHours(), e.getMinutes()); }
+    else $("#timerEnds").textContent = "Paused";
+  }
+}
+function timerToggle() {
+  const st = timerState();
+  if (st === "idle") {
+    const ms = readInputs(); if (ms <= 0) { toast("Set a time first"); return; }
+    S.timer.dur = ms; S.timer.label = cleanLabel($("#tLabel").value); S.timer.endAt = now() + ms; S.timer.left = null;
+  } else if (st === "running") { S.timer.left = timerLeft(); S.timer.endAt = null; }
+  else { S.timer.endAt = now() + S.timer.left; S.timer.left = null; }
+  audio(); save(); renderTimer(); syncNative();
+}
+function timerReset() { S.timer.endAt = null; S.timer.left = null; setInputs(S.timer.dur); $("#tLabel").value = S.timer.label; save(); renderTimer(); syncNative(); }
+$("#tStart").onclick = timerToggle;
+$("#tReset").onclick = timerReset;
+$("#tPlus").onclick = () => {
+  if (S.timer.endAt) S.timer.endAt += 60e3; else if (S.timer.left != null) S.timer.left += 60e3;
+  S.timer.dur += 60e3; save(); renderTimer(); syncNative();
+};
+function checkTimer() {
+  if (S.timer.endAt && now() >= S.timer.endAt) {
+    const late = now() - S.timer.endAt;
+    S.timer.endAt = null; S.timer.left = 0; save(); renderTimer();
+    if (late <= CONFIG.missedGraceSec * 1000 * 10) startRing({ kind: "timer", label: S.timer.label, sound: S.settings.sound });
+    else { S.timer.left = null; save(); renderTimer(); toast("Your timer finished while the app was closed"); }
+  }
+}
+$("#presets").innerHTML = CONFIG.timerPresets.map(s => `<button class="ghost" data-preset="${s}">${s >= 3600 ? s / 3600 + " h" : s >= 60 ? s / 60 + " min" : s + " s"}</button>`).join("");
+$("#presets").addEventListener("click", e => { const b = e.target.closest("[data-preset]"); if (b) { setInputs(+b.dataset.preset * 1000); timerToggle(); } });
+
+/* ===================== stopwatch ===================== */
+function swElapsed() { return S.sw.acc + (S.sw.startAt ? now() - S.sw.startAt : 0); }
+function renderSw() {
+  const e = swElapsed(), txt = fmtDur(e);
+  const html = esc(txt) + `<span class="cs">.${pad(Math.floor(e / 10) % 100)}</span>`;
+  const el = $("#swTime"); if (el._h !== html) { el.innerHTML = html; el._h = html; }
+}
+function renderSwControls() {
+  const running = !!S.sw.startAt, has = swElapsed() > 0;
+  $("#swStart").textContent = running ? "Stop" : has ? "Resume" : "Start";
+  $("#swStart").className = running ? "danger" : "primary";
+  $("#swLap").textContent = running || !has ? "Lap" : "Reset";
+  $("#swLap").disabled = !running && !has;
+  renderLaps();
+}
+function renderLaps() {
+  const L = S.sw.laps, splits = L.map((t, i) => t - (i ? L[i - 1] : 0));
+  let best = -1, worst = -1;
+  if (splits.length >= 2) { best = splits.indexOf(Math.min(...splits)); worst = splits.indexOf(Math.max(...splits)); }
+  $("#laps").innerHTML = splits.map((s, i) => ({ s, i })).reverse().map(({ s, i }) =>
+    `<li class="${i === best ? "best" : i === worst ? "worst" : ""}"><span>Lap ${i + 1}${i === best ? " · fastest" : i === worst ? " · slowest" : ""}</span><span class="digits">${fmtDur(s, true)} <span class="muted small">${fmtDur(L[i], true)}</span></span></li>`).join("");
+}
+function swToggle() {
+  if (S.sw.startAt) { S.sw.acc += now() - S.sw.startAt; S.sw.startAt = null; } else S.sw.startAt = now();
+  save(); renderSwControls(); renderSw();
+}
+function swLapOrReset() {
+  if (S.sw.startAt) { if (S.sw.laps.length < CONFIG.maxLaps) { S.sw.laps.push(swElapsed()); } else toast("Lap limit reached"); }
+  else { S.sw.acc = 0; S.sw.laps = []; }
+  save(); renderSwControls(); renderSw();
+}
+$("#swStart").onclick = swToggle;
+$("#swLap").onclick = swLapOrReset;
+
+/* ===================== settings ===================== */
+function fillSelect(sel, obj) { sel.innerHTML = Object.entries(obj).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join(""); }
+fillSelect($("#sTheme"), THEMES); fillSelect($("#sSound"), SOUNDS); fillSelect($("#aSound"), SOUNDS);
+$("#sSnooze").innerHTML = SNOOZES.map(n => `<option value="${n}">${n} min</option>`).join("");
+const SWITCHES = { s24: "h24", sSec: "seconds", sAnalog: "analog", sVib: "vibrate", sWake: "wake", sMon: "monday" };
+function applySettings() {
+  document.body.dataset.theme = S.settings.theme;
+  const tc = { dark: "#0e1116", light: "#f5f6f8", sunset: "#1a1020", contrast: "#000000" }[S.settings.theme];
+  document.querySelector('meta[name="theme-color"]').setAttribute("content", tc);
+  for (const id in SWITCHES) $("#" + id).setAttribute("aria-checked", S.settings[SWITCHES[id]]);
+  $("#sTheme").value = S.settings.theme; $("#sSound").value = S.settings.sound;
+  $("#sVol").value = S.settings.volume; $("#sSnooze").value = S.settings.snooze;
+  $("#bigTime")._h = null; $("#cityList")._h = null;
+  renderClock(); renderWorld(); renderAlarms(); renderTimer(); updateWake();
+}
+for (const id in SWITCHES) $("#" + id).onclick = () => { const k = SWITCHES[id]; S.settings[k] = !S.settings[k]; save(); applySettings(); };
+$("#sTheme").onchange = e => { if (THEMES[e.target.value]) { S.settings.theme = e.target.value; save(); applySettings(); } };
+$("#sSound").onchange = e => { if (SOUNDS[e.target.value]) { S.settings.sound = e.target.value; save(); playBar(S.settings.sound); } };
+$("#sVol").oninput = e => { S.settings.volume = clamp(+e.target.value, 0, 100); save(); };
+$("#sVol").onchange = () => playBar(S.settings.sound);
+$("#sSnooze").onchange = e => { const v = +e.target.value; if (SNOOZES.includes(v)) { S.settings.snooze = v; save(); } };
+$("#sTest").onclick = () => playBar(S.settings.sound);
+$("#aSound").onchange = e => { if (SOUNDS[e.target.value]) playBar(e.target.value); };
+$("#btnSettings").onclick = () => openModal("#mSettings");
+$("#btnHelp").onclick = () => openModal("#mHelp");
+
+/* ===================== modals, tabs, keys ===================== */
+let openM = null, lastFocus = null;
+function openModal(sel) { closeModal(); openM = $(sel); lastFocus = document.activeElement; openM.classList.add("on"); const f = openM.querySelector("input,select,button"); if (f) f.focus(); }
+function closeModal() { if (!openM) return; openM.classList.remove("on"); openM = null; if (lastFocus && lastFocus.focus) lastFocus.focus(); }
+$$(".modal").forEach(m => { m.addEventListener("click", e => { if (e.target === m || e.target.closest("[data-close]")) closeModal(); }); });
+const VIEWS = ["clock", "world", "alarm", "timer", "stopwatch"];
+function show(v) {
+  if (!VIEWS.includes(v)) return;
+  S.view = v; save();
+  $$("section.view").forEach(s => s.classList.toggle("active", s.id === "view-" + v));
+  $$("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.view === v));
+  if (v === "world") renderWorld();
+  if (v === "alarm") renderAlarms();
+  updateWake();
+}
+$$("nav.tabs button").forEach(b => b.onclick = () => show(b.dataset.view));
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    if ($("#night").classList.contains("on")) { setNight(false); return; }
+    if (openM) { closeModal(); return; }
+  }
+  if (ringing) { if (e.key === "Enter" || e.key === " " || e.key === "Escape") { e.preventDefault(); $("#ringStop").click(); } return; }
+  if (openM || e.ctrlKey || e.metaKey || e.altKey) return;
+  const tag = (e.target.tagName || "").toLowerCase(); if (tag === "input" || tag === "select" || tag === "textarea") return;
+  if ($("#night").classList.contains("on")) { setNight(false); return; }
+  if (/^[1-5]$/.test(e.key)) { show(VIEWS[+e.key - 1]); return; }
+  const k = e.key.toLowerCase();
+  if (k === "n") { setNight(true); return; }
+  if (e.key === " " && tag !== "button") {
+    if (S.view === "timer") { e.preventDefault(); timerToggle(); }
+    else if (S.view === "stopwatch") { e.preventDefault(); swToggle(); }
+  }
+  if (k === "l" && S.view === "stopwatch" && S.sw.startAt) swLapOrReset();
+  if (k === "r") { if (S.view === "stopwatch" && !S.sw.startAt && swElapsed()) swLapOrReset(); if (S.view === "timer" && timerState() !== "idle") timerReset(); }
+});
+document.addEventListener("visibilitychange", () => { updateWake(); if (document.visibilityState === "visible") { tick(); renderAlarms(); } });
+
+/* ===================== main loop ===================== */
+let lastMinute = -1;
+function tick() {
+  checkAlarms(); checkTimer();
+  renderClock();
+  if (S.view === "stopwatch" && S.sw.startAt) renderSw();
+  if (S.view === "timer" && S.timer.endAt) renderTimer();
+  const m = new Date().getMinutes();
+  if (m !== lastMinute) { lastMinute = m; renderNextAlarm(); if (S.view === "world") renderWorld(); if (S.view === "alarm") renderAlarms(); }
+}
+function frame() { if (S.view === "stopwatch" && S.sw.startAt) renderSw(); if (S.settings.analog && S.view === "clock") renderClock(); requestAnimationFrame(frame); }
+
+/* ===================== install offer (web build) ===================== */
+// Opened in a phone browser (not installed): offer to put the app on the home screen.
+// Android Chrome: real Install button. iPhone: Safari can't be triggered, so show Share → Add to Home Screen.
+// Inside another web app's window (e.g. the Ai-Tools app): say how to open it in the browser, with Copy link.
+const INST = { evt: null, shown: false };
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isTouch = () => matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+const standalone = () => matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches || navigator.standalone === true;
+const installedApp = () => standalone() && /[?&]app=1/.test(location.search);   // this app's own manifest starts at ./?app=1
+const installable = () => CONFIG.installPrompt && (isTouch() || !!INST.evt) && !window.Capacitor && location.protocol.startsWith("http") && !installedApp();
+const installMode = () => standalone() ? "other-app" : INST.evt ? "prompt" : isIOS() ? "ios" : "menu";
+const NEVER_KEY = CONFIG.storageKey + ".installNever";
+function neverAgain() { try { return localStorage.getItem(NEVER_KEY) === "1"; } catch (e) { return false; } }
+function refreshInstallBtn() { $("#btnInstall").hidden = !installable(); }
+function openInstall() {
+  const mode = installMode(), right = $("#installRight"), how = $("#installHow");
+  $("#installText").textContent = "Add " + (document.title || "this app") + " to your home screen. It opens like a normal app and works offline.";
+  $("#installNever").checked = neverAgain(); right.innerHTML = "";
+  const btn = (label, fn) => { const b = document.createElement("button"); b.className = "primary"; b.textContent = label; b.onclick = fn; right.appendChild(b); };
+  if (mode === "prompt") {
+    how.textContent = "";
+    btn("⬇ Install", async () => { const e = INST.evt; INST.evt = null; closeInstall(); try { await e.prompt(); await e.userChoice; } catch (err) {} refreshInstallBtn(); });
+  } else if (mode === "ios") {
+    how.textContent = "In Safari, tap Share ⬆ at the bottom of the screen, then “Add to Home Screen”.";
+    btn("Got it", closeInstall);
+  } else if (mode === "other-app") {
+    how.textContent = "You're inside another app, which can't install this one. Open this page in your browser (Chrome on Android, Safari on iPhone), then choose “Install app” or “Add to Home Screen”.";
+    btn("Copy link", async () => {
+      const url = location.href.split("#")[0].replace(/[?&](app|install)=1|[?&]from=[\w-]+/g, "");
+      try { await navigator.clipboard.writeText(url); toast("Link copied"); } catch (err) { toast(url, 6000); }
+    });
+  } else {
+    how.textContent = "In your browser menu ⋮, choose “Install app” or “Add to Home screen”.";
+    btn("Got it", closeInstall);
+  }
+  openModal("#mInstall");
+}
+function closeInstall() {
+  try { if ($("#installNever").checked) localStorage.setItem(NEVER_KEY, "1"); else localStorage.removeItem(NEVER_KEY); } catch (e) {}
+  closeModal();
+}
+function maybeOfferInstall() {
+  const asked = /[?&]install=1/.test(location.search);   // opened from a "⬇ Download" button: always show it
+  if (INST.shown || !installable() || (neverAgain() && !asked) || openM || ringing) return;
+  INST.shown = true; openInstall();
+}
+$("#installLater").onclick = closeInstall;
+$("#btnInstall").onclick = openInstall;
+if (CONFIG.installPrompt) {
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); INST.evt = e; refreshInstallBtn(); maybeOfferInstall(); });
+  window.addEventListener("appinstalled", () => { INST.evt = null; refreshInstallBtn(); toast("Installed ✓"); });
+}
+/* Back to the site it was opened from (only when it came from there) */
+function setupBackLink() {
+  const bl = CONFIG.backLink; if (!bl || !bl.url || installedApp()) return;
+  let came = false;
+  try {
+    const dir = new URL(".", bl.url).href;
+    came = /[?&]from=/.test(location.search) || (document.referrer && document.referrer.startsWith(dir)) || sessionStorage.getItem(CONFIG.storageKey + ".from") === "1";
+    if (came) sessionStorage.setItem(CONFIG.storageKey + ".from", "1");
+  } catch (e) {}
+  if (!came) return;
+  const a = $("#backLink"); a.href = bl.url; a.textContent = "‹ " + (bl.label || "Back"); a.hidden = false;
+}
+
+/* ===================== start ===================== */
+$("#appTitle").textContent = CONFIG.title;
+$("#alarmNote").textContent = window.Capacitor ? "" : "In a web browser, alarms only ring while this page is open. Install the app version for alarms that ring when it's closed.";
+$("#helpWebNote").textContent = $("#alarmNote").textContent;
+load(); buildTicks(); applySettings(); setInputs(S.timer.dur); $("#tLabel").value = S.timer.label;
+renderSw(); renderSwControls(); show(S.view); tick();
+setInterval(tick, 250); requestAnimationFrame(frame);
+syncNative();
+setupBackLink(); refreshInstallBtn(); setTimeout(maybeOfferInstall, 600);
+if (CONFIG.serviceWorker && "serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+
+</script>
+</body>
+</html>

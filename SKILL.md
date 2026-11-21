@@ -68,6 +68,17 @@ Edit `CONFIG`, `DEFAULTS`, `THEMES` and `SOUNDS` at the top of the script. To ad
 ## Step 2: Test before delivering
 `python3 tests/test_template.py [file]` runs 51 checks in Chrome using Playwright's fake clock. They cover alarms ringing at the exact minute, snooze, one-off alarms turning off, weekday alarms staying silent on Saturday, missed-alarm grace, timer pause/reload/ring/+1 min, stopwatch laps, world-clock offsets (Perth, Tokyo, Sydney daylight saving, India +5:30), keyboard shortcuts, themes, corrupted saved data, no horizontal overflow at 320–1280 px wide, and the native scheduling bridge (mocked). **All must pass.** Also look at screenshots of each tab after visual changes.
 
+## Step 2b: Web version (installable from a phone browser)
+`python3 scripts/build_web.py assets/clock-template.html docs --name "Tick Clock" [--back-url "https://…/Ai-Tools/index.html#apps" --back-label "Ai-Tools"]`, then test it with `python3 tests/test_web.py docs` (12 checks).
+- **Give each app its own site** (its own repo or `/docs` folder with GitHub Pages). An app in a sub-folder of another installed web app, such as `Ai-Tools/apps/…`, opens inside that app's window on Android and can't get its own home-screen icon. The site's Apps card then links to the app's own address.
+- The build switches on `CONFIG.installPrompt`. In a phone browser a **Get the app** sheet appears:
+  - **Android Chrome:** a real Install button.
+  - **iPhone Safari:** the steps (Share → Add to Home Screen).
+  - **Inside another web app:** the steps plus Copy link.
+- "Never show again" is remembered on the device, but `?install=1` (from a **⬇ Download** button) always shows the sheet.
+- `?from=<site>` or arriving from the `--back-url` site shows a **‹ back** link.
+- The manifest's `start_url` is `./?app=1`, which is how the app knows it has been installed.
+
 ## Step 3: Package for the app stores
 ```
 python3 scripts/build_app_package.py assets/clock-template.html OUT --name "Tick Clock" --app-id com.yourname.tickclock [--color "#4fd1c5"] [--no-screenshots]

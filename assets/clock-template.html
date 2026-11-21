@@ -31,7 +31,8 @@ button.ghost{background:transparent;border:1px solid var(--line)}
 button:disabled{opacity:.45;cursor:default}
 input,select{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:.55em .7em;min-height:44px}
 header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px}
-header h1{font-size:1.15rem;margin:0;letter-spacing:.04em}
+header h1{font-size:1.15rem;margin:0;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#backLink:not([hidden])+h1{font-size:1rem}
 header .icons{display:flex;gap:6px}
 header .icons button{background:transparent;font-size:1.3rem;padding:.3em .6em}
 main{flex:1;overflow-y:auto;padding:4px 16px 16px}
@@ -124,6 +125,10 @@ nav.tabs button[aria-selected="true"]{color:var(--accent);font-weight:700}
 #ring .controls button{min-width:140px;font-size:1.15rem;min-height:56px}
 @keyframes shake{0%,100%{transform:rotate(0)}25%{transform:rotate(-14deg)}75%{transform:rotate(14deg)}}
 @media (prefers-reduced-motion:reduce){#ringIcon{animation:none}#timerRing .fgc,.switch::after{transition:none}}
+.back{color:var(--accent);text-decoration:none;font-weight:700;font-size:.95rem;padding:.4em .5em .4em 0;white-space:nowrap}
+header .icons button.install{font-size:.85rem;border:1px dashed var(--accent);color:var(--accent);padding:.3em .7em;min-height:36px;white-space:nowrap}
+.never{display:flex;align-items:center;gap:8px;margin:12px 0 4px;color:var(--muted);font-size:.9rem;cursor:pointer}
+.never input{width:18px;height:18px;min-height:0;accent-color:var(--accent)}
 .toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-b));transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:12px;z-index:70;display:none;max-width:90vw}
 .toast.on{display:block}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -131,8 +136,9 @@ nav.tabs button[aria-selected="true"]{color:var(--accent);font-weight:700}
 </head>
 <body data-theme="dark">
 <header>
-  <h1 id="appTitle">CLOCK</h1>
+  <div class="row" style="gap:6px;flex-wrap:nowrap;min-width:0"><a id="backLink" class="back" hidden></a><h1 id="appTitle">CLOCK</h1></div>
   <div class="icons">
+    <button id="btnInstall" class="install" hidden>⬇ Install</button>
     <button id="btnHelp" aria-label="How to use">?</button>
     <button id="btnSettings" aria-label="Settings">⚙</button>
   </div>
@@ -284,6 +290,17 @@ nav.tabs button[aria-selected="true"]{color:var(--accent);font-weight:700}
   </div>
 </div>
 
+<!-- Get the app -->
+<div class="modal" id="mInstall" role="dialog" aria-modal="true" aria-labelledby="mInstallT">
+  <div class="sheet">
+    <h2 id="mInstallT">Get the app</h2>
+    <p id="installText"></p>
+    <p class="muted" id="installHow"></p>
+    <label class="never"><input type="checkbox" id="installNever"> Never show again</label>
+    <div class="row spread" style="margin-top:10px"><button class="ghost" id="installLater">Not now</button><span id="installRight"></span></div>
+  </div>
+</div>
+
 <!-- Ringing -->
 <div id="ring" role="alertdialog" aria-modal="true" aria-labelledby="ringTitle" aria-describedby="ringLabel">
   <div id="ringIcon" aria-hidden="true">⏰</div>
@@ -309,6 +326,8 @@ const CONFIG = {
   timerPresets: [60, 180, 300, 600, 900, 1800, 3600],
   defaultCities: ["Europe/London", "America/New_York", "Asia/Tokyo"],
   serviceWorker: false,                // true in installable/app builds
+  installPrompt: false,                // web build: offer "Get the app" (install to home screen) when opened in a phone browser
+  backLink: null,                      // web build inside a site, e.g. { url: "https://…/Ai-Tools/index.html#apps", label: "Ai-Tools" }
   maxAlarms: 30, maxCities: 20, maxLaps: 200,
   onAlarmsChanged: null                // optional hook(alarms) e.g. for custom native scheduling
 };
@@ -909,6 +928,71 @@ function tick() {
 }
 function frame() { if (S.view === "stopwatch" && S.sw.startAt) renderSw(); if (S.settings.analog && S.view === "clock") renderClock(); requestAnimationFrame(frame); }
 
+/* ===================== install offer (web build) ===================== */
+// Opened in a phone browser (not installed): offer to put the app on the home screen.
+// Android Chrome: real Install button. iPhone: Safari can't be triggered, so show Share → Add to Home Screen.
+// Inside another web app's window (e.g. the Ai-Tools app): say how to open it in the browser, with Copy link.
+const INST = { evt: null, shown: false };
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isTouch = () => matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+const standalone = () => matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches || navigator.standalone === true;
+const installedApp = () => standalone() && /[?&]app=1/.test(location.search);   // this app's own manifest starts at ./?app=1
+const installable = () => CONFIG.installPrompt && (isTouch() || !!INST.evt) && !window.Capacitor && location.protocol.startsWith("http") && !installedApp();
+const installMode = () => standalone() ? "other-app" : INST.evt ? "prompt" : isIOS() ? "ios" : "menu";
+const NEVER_KEY = CONFIG.storageKey + ".installNever";
+function neverAgain() { try { return localStorage.getItem(NEVER_KEY) === "1"; } catch (e) { return false; } }
+function refreshInstallBtn() { $("#btnInstall").hidden = !installable(); }
+function openInstall() {
+  const mode = installMode(), right = $("#installRight"), how = $("#installHow");
+  $("#installText").textContent = "Add " + (document.title || "this app") + " to your home screen. It opens like a normal app and works offline.";
+  $("#installNever").checked = neverAgain(); right.innerHTML = "";
+  const btn = (label, fn) => { const b = document.createElement("button"); b.className = "primary"; b.textContent = label; b.onclick = fn; right.appendChild(b); };
+  if (mode === "prompt") {
+    how.textContent = "";
+    btn("⬇ Install", async () => { const e = INST.evt; INST.evt = null; closeInstall(); try { await e.prompt(); await e.userChoice; } catch (err) {} refreshInstallBtn(); });
+  } else if (mode === "ios") {
+    how.textContent = "In Safari, tap Share ⬆ at the bottom of the screen, then “Add to Home Screen”.";
+    btn("Got it", closeInstall);
+  } else if (mode === "other-app") {
+    how.textContent = "You're inside another app, which can't install this one. Open this page in your browser (Chrome on Android, Safari on iPhone), then choose “Install app” or “Add to Home Screen”.";
+    btn("Copy link", async () => {
+      const url = location.href.split("#")[0].replace(/[?&](app|install)=1|[?&]from=[\w-]+/g, "");
+      try { await navigator.clipboard.writeText(url); toast("Link copied"); } catch (err) { toast(url, 6000); }
+    });
+  } else {
+    how.textContent = "In your browser menu ⋮, choose “Install app” or “Add to Home screen”.";
+    btn("Got it", closeInstall);
+  }
+  openModal("#mInstall");
+}
+function closeInstall() {
+  try { if ($("#installNever").checked) localStorage.setItem(NEVER_KEY, "1"); else localStorage.removeItem(NEVER_KEY); } catch (e) {}
+  closeModal();
+}
+function maybeOfferInstall() {
+  const asked = /[?&]install=1/.test(location.search);   // opened from a "⬇ Download" button: always show it
+  if (INST.shown || !installable() || (neverAgain() && !asked) || openM || ringing) return;
+  INST.shown = true; openInstall();
+}
+$("#installLater").onclick = closeInstall;
+$("#btnInstall").onclick = openInstall;
+if (CONFIG.installPrompt) {
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); INST.evt = e; refreshInstallBtn(); maybeOfferInstall(); });
+  window.addEventListener("appinstalled", () => { INST.evt = null; refreshInstallBtn(); toast("Installed ✓"); });
+}
+/* Back to the site it was opened from (only when it came from there) */
+function setupBackLink() {
+  const bl = CONFIG.backLink; if (!bl || !bl.url || installedApp()) return;
+  let came = false;
+  try {
+    const dir = new URL(".", bl.url).href;
+    came = /[?&]from=/.test(location.search) || (document.referrer && document.referrer.startsWith(dir)) || sessionStorage.getItem(CONFIG.storageKey + ".from") === "1";
+    if (came) sessionStorage.setItem(CONFIG.storageKey + ".from", "1");
+  } catch (e) {}
+  if (!came) return;
+  const a = $("#backLink"); a.href = bl.url; a.textContent = "‹ " + (bl.label || "Back"); a.hidden = false;
+}
+
 /* ===================== start ===================== */
 $("#appTitle").textContent = CONFIG.title;
 $("#alarmNote").textContent = window.Capacitor ? "" : "In a web browser, alarms only ring while this page is open. Install the app version for alarms that ring when it's closed.";
@@ -917,10 +1001,11 @@ load(); buildTicks(); applySettings(); setInputs(S.timer.dur); $("#tLabel").valu
 renderSw(); renderSwControls(); show(S.view); tick();
 setInterval(tick, 250); requestAnimationFrame(frame);
 syncNative();
+setupBackLink(); refreshInstallBtn(); setTimeout(maybeOfferInstall, 600);
 if (CONFIG.serviceWorker && "serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
 
 // TEST-HOOK-START
-window.__clock = { S, CONFIG, nextFire, checkAlarms, startRing, stopRing, save, load, offsetMin, show, renderAlarms, renderWorld, getRinging: () => ringing };
+window.__clock = { S, CONFIG, nextFire, checkAlarms, startRing, stopRing, save, load, offsetMin, show, renderAlarms, renderWorld, getRinging: () => ringing, INST, openInstall, installMode };
 // TEST-HOOK-END
 </script>
 </body>
